@@ -23,18 +23,19 @@ def build_messages(name, condition, price):
     ]
 
 
-def call_llm(messages):
+def call_llm(messages, json_mode=True):
     """调接口，返回纯文本"""
     headers = {
         "Authorization": f"Bearer {API_KEY}",     # 通行证：Bearer + 空格 + Key
         "Content-Type": "application/json",       # 我发的是 JSON
     }
     payload = {
-        "model": "deepseek-chat",                 # 用哪个模型
-        "messages": messages,                     # 前面 build_messages 造好的对话
-        "response_format": {"type": "json_object"},  # 关键：要求返回合法 JSON
+        "model": "deepseek-chat",
+        "messages": messages,
         "temperature": 0.7,
     }
+    if json_mode:                                   # 只有需要 JSON 时才加这个参数
+        payload["response_format"] = {"type": "json_object"}
 
     resp = requests.post(URL, headers=headers, json=payload, timeout=30)
 

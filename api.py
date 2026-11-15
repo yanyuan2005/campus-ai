@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi_offline import FastAPIOffline as FastAPI
 from pydantic import BaseModel
 from json_out import build_messages, call_llm, parse_json
+from vector_store import search 
 
 load_dotenv()
 
@@ -56,3 +57,48 @@ def describe(req: DescribeRequest):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+class AskRequest(BaseModel):
+    question: str
+    top_k: int = 3
+
+
+class AskResponse(BaseModel):
+    answer: str
+    sources: list[str]
+
+
+@app.post("/ai/ask", response_model=AskResponse)
+def ask(req: AskRequest):
+    try:
+        docs, dists = search(req.question, k=req.top_k)
+
+        # 没检索到内容 → 直接兜底，不让模型瞎编
+        if not docs or dists[0] > 1.0:
+            return {"answer": "未收录相关问题，请换个问法或联系客服。", "sources": []}
+
+        context = "\n\n".join(f"[{i+1}] {d}" for i, d in enumerate(docs))
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "你是校园二手交易平台的客服。只依据【参考资料】回答问题；"
+                    "资料中没有的内容，直接回答“未收录”，不要编造。"
+                    "如果参考资料与问题无关，也只回答“未收录”，并且不要标注来源。"
+                    "回答简洁，并在末尾用（来源：序号）标注依据。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"【参考资料】\n{context}\n\n【问题】{req.question}",
+            },
+        ]
+
+        # 改成
+        answer = call_llm(messages, json_mode=False) or "未收录相关问题。"
+        return {"answer": answer, "sources": [d[:120] for d in docs]}
+
+    except Exception as exc:
+        print("[ask 降级]", type(exc).__name__, exc)
+        return {"answer": "服务暂时不可用，请稍后重试。", "sources": []}
