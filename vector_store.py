@@ -31,6 +31,14 @@ def search(query: str, k: int = 3):
     res = col.query(query_embeddings=[qv], n_results=k)
     return res["documents"][0], res["distances"][0]
 
+def ensure_index(text: str, size: int = 500, overlap: int = 50):
+    """库里没数据就自动灌，云端启动时调用"""
+    if col.count() > 0:
+        return
+    from chunk import split_text
+    chunks = split_text(text, size=size, overlap=overlap)
+    build_index(chunks)
+    print(f"[索引] 已自动构建 {len(chunks)} 块")
 
 if __name__ == "__main__":
     from chunk import split_text

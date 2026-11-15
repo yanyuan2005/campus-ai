@@ -1,16 +1,22 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
 from fastapi_offline import FastAPIOffline as FastAPI
 from pydantic import BaseModel
 from json_out import build_messages, call_llm, parse_json
-from vector_store import search 
+from vector_store import search, ensure_index 
+
 
 load_dotenv()
 
 app = FastAPI(title="校园二手交易 AI 服务", version="1.0")
 
+@app.on_event("startup")
+def _prepare_index():
+    path = "docx.txt"
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            ensure_index(f.read())
 
 class DescribeRequest(BaseModel):
     name: str
