@@ -2,6 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from fastapi_offline import FastAPIOffline as FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from json_out import build_messages, call_llm, parse_json
 from vector_store import search, ensure_index 
@@ -10,6 +11,14 @@ from vector_store import search, ensure_index
 load_dotenv()
 
 app = FastAPI(title="校园二手交易 AI 服务", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def _prepare_index():
