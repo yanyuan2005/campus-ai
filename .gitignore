@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 .idea/
-chroma_db/
+chroma_db/chroma_db/

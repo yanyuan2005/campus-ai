@@ -52,3 +52,40 @@ if __name__ == "__main__":
     docs, dists = search("退款规则是什么")
     for i, (d, s) in enumerate(zip(docs, dists)):
         print(f"[{i}] 距离 {s:.4f}：{d[:60]}…")
+
+# ---------- 混合检索：向量相似度 + 关键词覆盖率 ----------
+def _bigrams(s: str) -> set[str]:
+    s = "".join(ch for ch in s if ch.strip())
+    return {s[i : i + 2] for i in range(len(s) - 1)}
+
+
+def search_hybrid(query: str, k: int = 3, min_score: float = 0.32):
+    """返回 (文档列表, 得分列表)。得分低于 min_score 视为未命中，返回空。
+
+    为什么加关键词：中文短问句与长段落做纯向量相似度时，命中率不稳定；
+    这里把「向量余弦相似度」与「查询词二元组覆盖率」按 55/45 加权，
+    既保留语义检索，又能兜住「运费」「信用分」这类关键词型问题。
+    """
+    total = col.count()
+    if total == 0:
+        return [], []
+
+    qv = embed([query])[0]
+    res = col.query(query_embeddings=[qv], n_results=total)
+    docs = res["documents"][0]
+    dists = res["distances"][0]
+
+    qb = _bigrams(query)
+    scored = []
+    for doc, dist in zip(docs, dists):
+        cosine = max(0.0, 1 - dist / 2)          # 归一化向量的平方 L2 距离 → 余弦
+        cover = len(qb & _bigrams(doc)) / max(1, len(qb))
+        score = 0.55 * cosine + 0.45 * cover
+        scored.append((score, doc))
+
+    scored.sort(key=lambda x: -x[0])
+    if not scored or scored[0][0] < min_score:
+        return [], []
+
+    top = scored[:k]
+    return [d for _, d in top], [round(s, 4) for s, _ in top]

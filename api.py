@@ -5,7 +5,7 @@ from fastapi_offline import FastAPIOffline as FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from json_out import build_messages, call_llm, parse_json
-from vector_store import search, ensure_index 
+from vector_store import search_hybrid, ensure_index 
 
 
 load_dotenv()
@@ -19,13 +19,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 @app.on_event("startup")
 def _prepare_index():
     path = "docx.txt"
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            ensure_index(f.read())
+            ensure_index(f.read(), size=400)
 
 class DescribeRequest(BaseModel):
     name: str
@@ -86,10 +85,10 @@ class AskResponse(BaseModel):
 @app.post("/ai/ask", response_model=AskResponse)
 def ask(req: AskRequest):
     try:
-        docs, dists = search(req.question, k=req.top_k)
+        docs, dists = search_hybrid(req.question, k=req.top_k)
 
         # 没检索到内容 → 直接兜底，不让模型瞎编
-        if not docs or dists[0] > 1.0:
+        if not docs:
             return {"answer": "未收录相关问题，请换个问法或联系客服。", "sources": []}
 
         context = "\n\n".join(f"[{i+1}] {d}" for i, d in enumerate(docs))

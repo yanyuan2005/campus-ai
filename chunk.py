@@ -24,23 +24,25 @@ if __name__ == "__main__":
 
     if len(chunks) > 1:
         print("重叠验证：", chunks[0][-50:] == chunks[1][:50])
+def split_by_sections(text: str, max_len: int = 400) -> list[str]:
+    """优先按 ## 小节切块：每节语义完整，比固定长度切更好检索。"""
+    parts, cur = [], []
+    for line in text.splitlines():
+        if line.startswith("## ") and cur:
+            parts.append("\n".join(cur).strip())
+            cur = [line]
+        else:
+            cur.append(line)
+    if cur:
+        parts.append("\n".join(cur).strip())
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    chunks: list[str] = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if len(p) <= max_len:
+            chunks.append(p)
+        else:
+            chunks.extend(split_text(p, size=max_len // 2, overlap=30))
+    return chunks
