@@ -5,7 +5,7 @@ from fastapi_offline import FastAPIOffline as FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from json_out import build_messages, call_llm, parse_json
-from vector_store import search_hybrid, ensure_index 
+from vector_store import search_hybrid, ensure_index, _bigrams 
 
 
 load_dotenv()
@@ -81,6 +81,37 @@ class AskResponse(BaseModel):
     answer: str
     sources: list[str]
 
+
+def _keyword_sections(question: str, min_cover: float = 0.30) -> list[str]:
+    """索引检索未命中时的关键词兜底：直接按段落算查询词覆盖率。
+
+    作用：即使向量库重建异常，只要问题与规则文档里的某一段高度重合，
+    仍然能答出来；覆盖率不够就返回空，继续走「未收录」，不编造。
+    """
+    try:
+        with open("docx.txt", encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return []
+
+    paras = [p.strip() for p in text.split("\n\n") if p.strip() and not p.strip().startswith("# ")]
+    qb = _bigrams(question)
+    best, best_cov = None, 0.0
+    for para in paras:
+        cov = len(qb & _bigrams(para)) / max(1, len(qb))
+        if cov > best_cov:
+            best, best_cov = para, cov
+    return [best] if best and best_cov >= min_cover else []
+
+
+@app.get("/debug/index")
+def debug_index():
+    """排查用：返回当前索引里的块数与每块开头，便于确认切块是否生效。"""
+    from vector_store import col
+
+    data = col.get(include=["documents"])
+    docs = data.get("documents") or []
+    return {"count": len(docs), "heads": [d[:28].replace("\n", " ") for d in docs]}
 
 @app.post("/ai/ask", response_model=AskResponse)
 def ask(req: AskRequest):
